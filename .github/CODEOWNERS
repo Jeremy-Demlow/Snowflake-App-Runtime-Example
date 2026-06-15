@@ -1,0 +1,11 @@
+# Code ownership — see docs/ARCHITECTURE.md "maintenance model".
+#
+# The pipeline and governance are owned by the platform/admin team. Application
+# teams self-serve under apps/* (no required platform review), so they can add
+# and iterate on apps without a bottleneck.
+
+# Platform team owns the CI/CD framework and the Snowflake governance.
+/.github/      @Jeremy-Demlow
+/governance/   @Jeremy-Demlow
+
+# apps/* is intentionally NOT owned here — app teams review their own apps.

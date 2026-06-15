@@ -1,0 +1,132 @@
+name: Deploy Governance (DCM)
+
+# Manages the single governance project SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE
+# (roles, warehouse, APPS/APPS_DEV schemas, grants). Triggers:
+#   pull_request (governance/** changed) -> PLAN only, posted to the PR summary
+#   push to main (governance/** changed) -> create + DEPLOY to target MAIN
+#   workflow_dispatch                    -> PLAN + optional DEPLOY
+#
+# Connection: DCM needs the nested SNOWFLAKE_CONNECTIONS_DEFAULT_* env shape
+# (bare SNOWFLAKE_AUTHENTICATOR is NOT honored by `snow dcm create`). We write
+# an empty [default] connections.toml stub; the env vars populate every field.
+#
+# DCM creates ACCOUNT-level objects (roles + warehouse), so it connects as
+# ACCOUNTADMIN and uses COMPUTE_WH (SKI_DEMO_WH may not exist yet on first run).
+# Post-deployment grants (governance/post_deployment_grants.sql) remain a
+# documented one-time manual step (FUTURE/SEMANTIC/account grants).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'governance/**'
+  push:
+    branches: [main]
+    paths:
+      - 'governance/**'
+  workflow_dispatch:
+    inputs:
+      plan_only:
+        description: 'Plan only (no deploy)'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: dcm-governance
+  cancel-in-progress: false
+
+env:
+  DCM_PROJECT: SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE
+  SNOWFLAKE_CONNECTIONS_DEFAULT_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+  SNOWFLAKE_CONNECTIONS_DEFAULT_USER: ${{ secrets.SNOWFLAKE_USER }}
+  SNOWFLAKE_CONNECTIONS_DEFAULT_ROLE: ACCOUNTADMIN
+  SNOWFLAKE_CONNECTIONS_DEFAULT_WAREHOUSE: COMPUTE_WH
+  SNOWFLAKE_CONNECTIONS_DEFAULT_AUTHENTICATOR: SNOWFLAKE_JWT
+  SNOWFLAKE_CONNECTIONS_DEFAULT_PRIVATE_KEY_FILE: /tmp/snowflake_key.p8
+
+jobs:
+  plan:
+    # PR or manual: plan only and post to the step summary.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'pull_request' && 'dev' || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "3.20"
+
+      - name: Write key + connection stub
+        run: |
+          umask 077
+          printf '%s' "${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}" > /tmp/snowflake_key.p8
+          mkdir -p ~/.snowflake
+          printf '[default]\n' > ~/.snowflake/connections.toml
+          chmod 600 ~/.snowflake/connections.toml /tmp/snowflake_key.p8
+
+      - name: Connection sanity
+        run: snow connection test -c default
+
+      - name: DCM plan (MAIN)
+        working-directory: governance
+        run: |
+          set -euo pipefail
+          snow dcm create --if-not-exists --target MAIN -c default
+          snow dcm plan --target MAIN -c default | tee /tmp/dcm_plan.txt
+          {
+            echo "### DCM Plan (target MAIN)"
+            echo ""
+            echo '```'
+            cat /tmp/dcm_plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/snowflake_key.p8 ~/.snowflake/connections.toml
+
+  deploy:
+    # Push to main, or manual dispatch with plan_only=false.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.plan_only == false)
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "3.20"
+
+      - name: Write key + connection stub
+        run: |
+          umask 077
+          printf '%s' "${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}" > /tmp/snowflake_key.p8
+          mkdir -p ~/.snowflake
+          printf '[default]\n' > ~/.snowflake/connections.toml
+          chmod 600 ~/.snowflake/connections.toml /tmp/snowflake_key.p8
+
+      - name: Connection sanity
+        run: snow connection test -c default
+
+      - name: DCM create + deploy (MAIN)
+        working-directory: governance
+        run: |
+          set -euo pipefail
+          snow dcm create --if-not-exists --target MAIN -c default
+          snow dcm deploy --target MAIN -c default | tee /tmp/dcm_deploy.txt
+          {
+            echo "### DCM Deploy (target MAIN)"
+            echo ""
+            echo '```'
+            cat /tmp/dcm_deploy.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/snowflake_key.p8 ~/.snowflake/connections.toml

@@ -33,3 +33,6 @@ __pycache__/
 venv/
 # Local dev connection (real file ignored; the .example is committed)
 **/.localdev/connections.toml
+
+# Local-only GitHub bootstrap scripts (not part of the published template)
+.local-setup/

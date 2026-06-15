@@ -1,0 +1,10 @@
+[project]
+name = "my-app"
+version = "0.1.0"
+description = "Starter template app on Snowflake (Streamlit in Snowflake)."
+requires-python = ">=3.11"
+dependencies = [
+    "snowflake-snowpark-python",
+    "streamlit",
+    "pandas",
+]

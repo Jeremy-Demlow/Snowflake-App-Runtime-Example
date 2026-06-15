@@ -1,0 +1,24 @@
+definition_version: 2
+
+# Copy this folder to apps/<your-app>/ and rename MY_APP below to a unique
+# object name. CI auto-discovers it; you do not edit any workflow.
+env:
+  app_schema: APPS_DEV
+  app_suffix: _DEV
+
+entities:
+  my_app:
+    type: streamlit
+    identifier:
+      name: MY_APP<% ctx.env.app_suffix %>
+      database: SKI_RESORT_DEMO
+      schema: <% ctx.env.app_schema %>
+    query_warehouse: SKI_DEMO_WH
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    main_file: streamlit_app.py
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml

@@ -66,49 +66,90 @@ only by *where an app object is deployed*:
 The app `snowflake.yml` exposes `app_schema` and `app_suffix` as templating
 variables; CI overrides them with `--env` (no file edits / no `sed`).
 
-## 3. Apps: two frameworks, one result
+## 3. Apps: a registry of many apps
 
-Both apps query the data read-only and render the same Daily Resort KPIs
-(visits, unique visitors, visits/guest, pass-holder %, weekend share, snow
-conditions) sourced from `SEM_DAILY_SUMMARY` and `FACT_PASS_USAGE` + `DIM_DATE`.
-Both hardcode the single data database `SKI_RESORT_DEMO`.
-
-- [`apps/nextjs-dashboard`](../apps/nextjs-dashboard) — Snowflake App Runtime
-  (Next.js), deployed with `snow app deploy` to SPCS.
-- [`apps/streamlit-dashboard`](../apps/streamlit-dashboard) — Streamlit in
-  Snowflake, deployed with `snow streamlit deploy`.
-
-The point is the **shared deploy loop**: the same `snow … deploy` ships either app.
-
-## 4. CI/CD: GitHub Actions
-
-CI deploys **only the apps** via the official
-[`snowflakedb/snowflake-cli-action`](https://github.com/snowflakedb/snowflake-cli-action).
-DCM governance is one-time setup (see ONBOARDING.md), so the pipeline stays fast
-and focused on shipping app changes.
+The `apps/` folder is a **registry**. Each subfolder is one app with its own
+`snowflake.yml`; CI discovers them all. Adding `apps/<your-app>/` ships a new app
+with no pipeline changes (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ```mermaid
 flowchart LR
-  feat["push feature branch / PR"] --> devwf["deploy-dev.yml"]
-  devwf --> appsdev["deploy to APPS_DEV, suffix _BRANCH (ephemeral)"]
-  close["PR closed"] --> cleanwf["cleanup-branch.yml -> drop the ephemeral apps"]
-  main["merge to main"] --> prodwf["deploy-prod.yml"]
-  prodwf --> gate{"Environment: production approval"}
-  gate -->|approved| appsprod["deploy to APPS (prod)"]
+  subgraph registry [apps/ = registry]
+    a1["nextjs-dashboard (snowflake-app)"]
+    a2["streamlit-dashboard (streamlit)"]
+    a3["_template (skipped: starts with _)"]
+    a4["your-new-app"]
+  end
+  registry --> scan["prepare job: glob apps/*/snowflake.yml, skip _*, read type"]
+  scan --> matrix["matrix [{name,dir,type}]"]
+  matrix --> r1["snowflake-app -> snow app deploy -x"]
+  matrix --> r2["streamlit -> snow streamlit deploy -x"]
 ```
 
-- **Feature branches / PRs** auto-deploy their **own** throwaway copy of both
-  dashboards into `APPS_DEV`, named with a sanitized branch slug. Each branch
-  gets isolated services and URLs.
-- **PR close** triggers `cleanup-branch.yml`, which removes that branch's apps so
-  dev objects don't pile up.
-- **PROD** only deploys from `main`, and only after a required reviewer approves
-  the `production` GitHub Environment. This is the "prod is locked down" control.
-- Authentication uses **key-pair** credentials (`SNOWFLAKE_PRIVATE_KEY_RAW`) via
-  a temporary connection (`-x`) — no interactive login, no config.toml in CI.
+The two example apps query the data read-only and render the same Daily Resort
+KPIs (visits, unique visitors, visits/guest, pass-holder %, weekend share, snow
+conditions) from `SEM_DAILY_SUMMARY` and `FACT_PASS_USAGE` + `DIM_DATE`. Both
+hardcode the single data database `SKI_RESORT_DEMO`.
+
+- [`apps/nextjs-dashboard`](../apps/nextjs-dashboard) — Snowflake App Runtime
+  (Next.js), `snow app deploy` to SPCS.
+- [`apps/streamlit-dashboard`](../apps/streamlit-dashboard) — Streamlit in
+  Snowflake, `snow streamlit deploy`.
+- [`apps/_template`](../apps/_template) — copy-me starter; the `_` prefix keeps
+  it out of CI.
+
+The point is the **shared deploy loop**: one matrix ships every app, either framework.
+
+## 4. CI/CD: GitHub Actions
+
+Four workflows, all using a shared composite action
+([`.github/actions/snowflake-cli`](../.github/actions/snowflake-cli/action.yml))
+that installs the official CLI, writes the key, and runs a connection test.
+Credentials use the **secrets vs variables** split (sensitive values masked,
+role/db/warehouse as readable variables) — see
+[PIPELINE_SETUP.md](PIPELINE_SETUP.md).
+
+```mermaid
+flowchart TD
+  feat["push feature branch / PR"] --> devwf["deploy-dev.yml (matrix over apps/*)"]
+  devwf --> appsdev["each app -> APPS_DEV, suffix _BRANCH"]
+  pr["PR to main"] --> dcmp["dcm-deploy.yml: PLAN on governance/** change"]
+  close["PR closed"] --> cleanwf["cleanup-branch.yml: drop each app's branch copy"]
+  main["merge to main"] --> prodwf["deploy-prod.yml (matrix)"]
+  main --> dcmd["dcm-deploy.yml: DEPLOY governance MAIN"]
+  prodwf --> gate{"production approval"}
+  gate -->|approved| appsprod["each app -> APPS (prod)"]
+```
+
+- **Feature branches / PRs**: `deploy-dev.yml` discovers every app and deploys
+  each to `APPS_DEV` with a sanitized branch suffix — isolated services + URLs.
+- **PR close**: `cleanup-branch.yml` removes that branch's apps.
+- **PROD**: `deploy-prod.yml` deploys from `main` only, behind the `production`
+  GitHub Environment approval gate.
+- **Governance**: `dcm-deploy.yml` plans on PRs touching `governance/**` and
+  deploys target `MAIN` on merge (it connects as `ACCOUNTADMIN`).
+- Auth: key-pair via a temporary connection (`-x`) for apps; the nested
+  `SNOWFLAKE_CONNECTIONS_DEFAULT_*` shape for `snow dcm`.
 
 > Endpoint URLs are assigned by Snowflake (`<hash>-<org>-<account>.snowflakecomputing.app`)
 > and are not customizable; a vanity domain requires PrivateLink + your own DNS.
+
+## 5. Maintenance model
+
+Who owns what, and what each change triggers:
+
+| Concern | Lives in | Trigger | Owner |
+| --- | --- | --- | --- |
+| An app's code/config | `apps/<name>/` | branch -> `APPS_DEV`; merge -> `APPS` (gated) | app team |
+| Adding an app | copy `apps/_template/` | same, no CI edit | app team |
+| Removing an app | delete folder | stops deploys; prod object dropped **manually** | app team |
+| Governance | `governance/**` | PR plan -> merge deploys `MAIN` | platform/admin |
+| Pipeline itself | `.github/**` | PR review (CODEOWNERS) | platform team |
+| Credentials / env wiring | GitHub Settings | one-time + on rotation | admin |
+
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) enforces the split: platform owns
+`.github/**` and `governance/**`; app teams self-serve `apps/*`. CI never deletes
+prod objects automatically — removing an app is a deliberate manual step.
 
 ## Teardown
 

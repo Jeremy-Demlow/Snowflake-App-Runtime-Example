@@ -1,73 +1,105 @@
-# Ski Resort Demo — Snowflake App Runtime Template
+# Snowflake Apps Framework — Ski Resort Demo
 
-An **end-to-end template** for building and shipping a Snowflake app with
+A **monorepo framework** for building and shipping multiple Snowflake apps with
 [Cortex Code Desktop](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code).
-It is designed for people who have **never used an IDE** before — if you've used
-Claude / Cowork, you can do this.
+Teams drop a new app under `apps/<name>/`, push a branch, and CI automatically
+deploys it — no pipeline edits. It's approachable for people who have **never
+used an IDE** (if you've used Claude / Cowork, you can do this) but it scales to
+a team of engineers shipping many apps.
 
-You get **one simple deploy loop** that ships **two** different apps over the
-same data:
+It ships with **two example apps** that render the same read-only "Daily Resort
+KPI" dashboard, proving one deploy loop works for either framework:
 
 | App | Framework | What it is |
 |-----|-----------|------------|
-| `apps/nextjs-dashboard` | Next.js (Snowflake App Runtime) | A full web app running on Snowflake |
+| `apps/nextjs-dashboard` | Next.js (Snowflake App Runtime) | A full web app running on Snowflake (SPCS) |
 | `apps/streamlit-dashboard` | Streamlit in Snowflake | A Python dashboard |
+| `apps/_template` | (starter) | Copy this to begin a new app — never deployed |
 
-Both render the **same** read-only "Daily Resort KPI" dashboard, so you can see
-that the **same workflow** ships either kind of app.
+## The big idea: environments at the app layer
 
-## The data
+There is **one** read-only data database, `SKI_RESORT_DEMO`. Because the data is
+identical everywhere, environments are **not** separate databases — they're just
+*where an app object is deployed*:
 
-The dashboards read from a ready-to-go ski-resort analytics dataset in the single
-`SKI_RESORT_DEMO` database: a dimensional model (`MARTS` — daily visits, lift
-scans, weather, revenue, etc.) plus Cortex Analyst semantic views (`SEMANTIC`).
-**The data is already provisioned — you don't need to load or set anything up.**
+| Environment | Schema | App object name | Who triggers it |
+|-------------|--------|-----------------|-----------------|
+| feature branch | `APPS_DEV` | `<APP>_<BRANCH>` | push a branch |
+| production | `APPS` | `<APP>` | merge to `main` + approval |
 
-There is **one** read-only data copy shared by every environment. Environments
-(dev, feature branches, production) differ only by *which app object* gets
-deployed and *where* — not by the data. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The `apps/` folder is the **registry**: CI scans it, reads each app's type
+(`snowflake-app` vs `streamlit`), and deploys each one. Adding `apps/<your-app>/`
+requires **zero** workflow changes.
 
-## Build this with Cortex Code
+## How a change flows
 
-You don't have to write any of this by hand — Cortex Code Desktop has built-in
-**skills** that scaffold, deploy, and operate these apps for you. In the CoCo
-chat, type:
+```mermaid
+flowchart TD
+  dev["Add/edit apps/&lt;name&gt;/ on a feature branch"] --> push["git push"]
+  push --> ddev["deploy-dev.yml: discover apps/* -> deploy each to APPS_DEV (suffix _BRANCH)"]
+  push --> pr["Open PR to main"]
+  pr --> dcm["dcm-deploy.yml: PLAN governance on PR (if governance/** changed)"]
+  ddev --> review["Review on ephemeral URLs"]
+  review --> merge["Merge to main"]
+  merge --> prod["deploy-prod.yml: approval gate -> deploy each app to APPS"]
+  merge --> dcmd["dcm-deploy.yml: DEPLOY governance to target MAIN"]
+  pr --> close["PR closed"] --> clean["cleanup-branch.yml: remove that branch's APPS_DEV apps"]
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture and
+maintenance model.
+
+## Build with Cortex Code
+
+Cortex Code Desktop has built-in **skills** that scaffold, deploy, and operate
+these apps. In the CoCo chat:
 
 | Skill | What it does |
 |-------|--------------|
-| `/build-app` | Starts a brand-new Snowflake app and helps you pick the right framework (Streamlit vs. Snowflake App Runtime). Great starting point if you're building from scratch. |
-| `/snowflake-apps` | Scaffolds, runs locally, **deploys**, and troubleshoots Snowflake App Runtime (Next.js) apps — `snow app deploy`, logs, status, redeploys. |
-
-For example, just ask: *"/snowflake-apps deploy the Next.js dashboard"* or
-*"/build-app build me a KPI dashboard on the ski-resort data"*.
+| `/build-app` | Start a brand-new Snowflake app; helps pick the framework. |
+| `/snowflake-apps` | Scaffold, run locally, **deploy**, and troubleshoot App Runtime (Next.js) apps. |
 
 ## What's in the box
 
 ```
 .
-├── docs/                  ← START HERE: ONBOARDING.md (+ ARCHITECTURE, TEARDOWN)
-├── governance/            ← DCM project: roles, warehouse, grants (infra-as-code)
-├── apps/                  ← the two dashboards (each has its own README)
-│   ├── nextjs-dashboard/
-│   └── streamlit-dashboard/
-├── scripts/               ← teardown.sh
-└── .github/workflows/     ← ephemeral branch apps, approval-gated PROD, PR cleanup
+├── docs/
+│   ├── ONBOARDING.md       ← START HERE (first deploy, step by step)
+│   ├── ARCHITECTURE.md     ← framework + flow + maintenance model
+│   ├── PIPELINE_SETUP.md   ← wire up GitHub Actions (secrets/vars/environments)
+│   └── TEARDOWN.md
+├── apps/
+│   ├── nextjs-dashboard/   ← example: Next.js (App Runtime)
+│   ├── streamlit-dashboard/← example: Streamlit in Snowflake
+│   └── _template/          ← copy me to start a new app (not deployed)
+├── governance/             ← DCM project: roles, warehouse, schemas, grants
+├── .github/
+│   ├── actions/snowflake-cli/  ← shared CLI setup composite action
+│   ├── workflows/          ← deploy-dev, deploy-prod, cleanup-branch, dcm-deploy
+│   └── CODEOWNERS          ← platform owns .github + governance; teams own apps/*
+├── scripts/teardown.sh
+└── CONTRIBUTING.md         ← add a new app in a few steps
 ```
 
-Extending the dashboards (add a chart, change a query) is documented in each
-app's README: [`apps/nextjs-dashboard/README.md`](apps/nextjs-dashboard/README.md)
-and [`apps/streamlit-dashboard/README.md`](apps/streamlit-dashboard/README.md).
+## Add a new app
+
+```bash
+cp -r apps/_template apps/my-app
+# edit apps/my-app/snowflake.yml (rename MY_APP) and streamlit_app.py
+git checkout -b my-app && git add apps/my-app && git commit -m "add my-app" && git push -u origin my-app
+```
+
+Pushing deploys `MY_APP_MY_APP` to `APPS_DEV`; merging to `main` ships `MY_APP`
+to `APPS`. Full steps in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quick start
 
-New here? Open **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — it walks you through
-installing Cortex Code Desktop and shipping your first app.
+New here? Open **[docs/ONBOARDING.md](docs/ONBOARDING.md)**.
 
-Already set up? The whole loop is:
+Already set up? The loop:
 
 ```bash
-# 1. Create roles, warehouse, and grants (infrastructure as code, one time)
+# 1. Governance (roles, warehouse, APPS/APPS_DEV schemas, grants) — one time
 snow dcm deploy SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE --target MAIN
 
 # 2. Ship the apps (defaults deploy to APPS_DEV with the _DEV suffix)
@@ -75,7 +107,5 @@ cd apps/nextjs-dashboard && snow app deploy
 cd ../streamlit-dashboard && snow streamlit deploy
 ```
 
-## Architecture
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the governance, apps,
-and CI/CD fit together.
+To run the pipeline in GitHub, wire up secrets/variables/environments per
+[docs/PIPELINE_SETUP.md](docs/PIPELINE_SETUP.md).

@@ -116,35 +116,43 @@ When you're working with a team, you don't deploy from your laptop — you let
    called my-change"*).
 2. Make an edit, then ask CoCo to **commit and push** it.
 3. GitHub automatically deploys your branch to its **own throwaway apps** in
-   `APPS_DEV` (named after your branch) so you can test it in isolation.
+   `APPS_DEV` (named after your branch) so you can test it in isolation. It
+   deploys **every** app under `apps/*`, so this scales as your team adds apps.
 4. When the team merges your change into **`main`**, GitHub waits for a
    **reviewer to approve** before deploying to **PROD** (the `APPS` schema).
    Production is locked down — nothing reaches it without a human saying yes.
 5. When your PR closes, GitHub automatically **removes your branch's apps** so
    nothing piles up.
 
+> Building more than one app? Each app is just a folder under `apps/`. See
+> [CONTRIBUTING.md](../CONTRIBUTING.md) to add one — CI picks it up automatically.
+
 ### One-time GitHub setup (an admin does this)
 
-The CI uses the official [`snowflakedb/snowflake-cli-action`](https://github.com/snowflakedb/snowflake-cli-action)
-and deploys **only the apps** — DCM governance is one-time setup (see below). An
-admin adds these in the GitHub repo under
-**Settings → Secrets and variables → Actions**:
+The CI uses a shared composite action over the official
+[`snowflakedb/snowflake-cli-action`](https://github.com/snowflakedb/snowflake-cli-action).
+Credentials use a **secrets vs variables** split: sensitive values are secrets
+(masked), while role/warehouse/database are variables (readable in logs).
 
-| Secret | What it is |
-|--------|------------|
-| `SNOWFLAKE_ACCOUNT` | Your account identifier |
-| `SNOWFLAKE_USER` | A service user for deployments |
-| `SNOWFLAKE_ROLE` | Role to deploy as (needs CREATE on the app schemas + SPCS privileges, e.g. `SKI_DEVELOPER` or an admin role) |
-| `SNOWFLAKE_PRIVATE_KEY_RAW` | The raw private key contents (key-pair auth) |
-| `PRIVATE_KEY_PASSPHRASE` | (Optional) passphrase, if the key has one |
+**Repo secrets** (Settings -> Secrets and variables -> Actions -> Secrets):
+`SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY_RAW`,
+(optional) `PRIVATE_KEY_PASSPHRASE`.
 
-And under **Settings → Environments**, create an environment named **`production`**
-with a **Required reviewer** — this is what makes PROD wait for approval.
+**Repo variables** (same page -> Variables): `SNOWFLAKE_ROLE` (e.g.
+`SKI_DEVELOPER`), `SNOWFLAKE_WAREHOUSE` (`SKI_DEMO_WH`), `SNOWFLAKE_DATABASE`
+(`SKI_RESORT_DEMO`).
+
+**Environments** (Settings -> Environments): `dev` (no protection) and
+`production` (**Required reviewer** — this is what makes PROD wait for approval).
+
+The full copy-paste setup (including one-command `gh` CLI bootstrap) is in
+**[docs/PIPELINE_SETUP.md](PIPELINE_SETUP.md)**.
 
 ### One-time governance setup (run once)
 
 CI deploys only the apps, so the roles, warehouse, and grants must exist first.
-Ask CoCo, or run:
+This can also run in CI via `dcm-deploy.yml` (plan on PR, deploy on merge to
+`main`). To do it by hand, ask CoCo, or run:
 
 ```bash
 # Create roles, warehouse, APPS + APPS_DEV schemas, grants

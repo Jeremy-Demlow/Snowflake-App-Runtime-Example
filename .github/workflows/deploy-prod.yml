@@ -1,18 +1,18 @@
 name: Deploy Apps to PROD
 
-# PROD only deploys from main, and only after a required reviewer approves the
-# "production" GitHub Environment. THIS is the lockdown.
+# Auto-discovers every app under apps/* (skipping "_"-prefixed) and deploys each
+# to the APPS schema (production), behind the "production" GitHub Environment
+# approval gate. Adding apps/<your-app>/ requires NO change to this workflow.
 #
-# One-time setup (admin): Settings -> Environments -> New environment "production"
-# -> add a Required reviewer. Add the secrets below under that environment (or
-# repo-wide).
-#
-# SCOPE: app deployment only. DCM governance is one-time setup:
-#   snow dcm deploy SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE --target MAIN
+# One-time setup (admin): Settings -> Environments -> "production" with a
+# Required reviewer. See docs/PIPELINE_SETUP.md.
 on:
   push:
     branches:
       - main
+    paths:
+      - 'apps/**'
+      - '!apps/_template/**'
   workflow_dispatch: {}
 
 concurrency:
@@ -20,33 +20,83 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-apps:
+  prepare:
     runs-on: ubuntu-latest
-    # The approval gate: this job pauses until a reviewer approves.
-    environment: production
-    env:
-      SNOWFLAKE_AUTHENTICATOR: SNOWFLAKE_JWT
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_PRIVATE_KEY_RAW: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
-      PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      count: ${{ steps.discover.outputs.count }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - uses: snowflakedb/snowflake-cli-action@v2
+      - name: Discover apps under apps/*
+        id: discover
+        run: |
+          set -euo pipefail
+          rows=""
+          for d in apps/*/; do
+            name="$(basename "$d")"
+            case "$name" in _*) echo "skip $name (template)"; continue;; esac
+            yml="apps/${name}/snowflake.yml"
+            [ -f "$yml" ] || { echo "skip $name (no snowflake.yml)"; continue; }
+            if grep -qE '^[[:space:]]*type:[[:space:]]*snowflake-app' "$yml"; then
+              type="snowflake-app"
+            elif grep -qE '^[[:space:]]*type:[[:space:]]*streamlit' "$yml"; then
+              type="streamlit"
+            else
+              echo "skip $name (unknown entity type)"; continue
+            fi
+            rows="${rows}$(printf '{"name":"%s","dir":"apps/%s","type":"%s"}' "$name" "$name" "$type")"$'\n'
+          done
+          matrix="$(printf '%s' "$rows" | grep -v '^$' | jq -sc '{include: .}')"
+          count="$(printf '%s' "$rows" | grep -vc '^$' || true)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "Discovered $count app(s): $matrix"
+
+  deploy:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    # The approval gate: this job pauses until a reviewer approves.
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      SNOWFLAKE_AUTHENTICATOR: SNOWFLAKE_JWT
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PRIVATE_KEY_RAW: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
+      PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+      SNOWFLAKE_ROLE: ${{ vars.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE }}
+    steps:
+      - uses: actions/checkout@v4
         with:
-          cli-version: "3.20"
+          persist-credentials: false
 
-      # PROD differs from the committed dev defaults only by WHERE the app object
-      # lands: the APPS schema and no name suffix. Passed via snow's native --env
-      # templating (no file edits / no sed). The data DB is fixed for all envs.
-      - name: Deploy Next.js dashboard (App Runtime / SPCS)
-        working-directory: apps/nextjs-dashboard
-        run: snow app deploy -x --env app_schema=APPS --env app_suffix=
+      - name: Setup Snowflake CLI
+        uses: ./.github/actions/snowflake-cli
+        with:
+          private-key-raw: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
 
-      - name: Deploy Streamlit dashboard
-        working-directory: apps/streamlit-dashboard
-        run: snow streamlit deploy --replace --prune -x --env app_schema=APPS --env app_suffix=
+      - name: Deploy ${{ matrix.name }} (${{ matrix.type }}) to APPS
+        working-directory: ${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.type }}" = "snowflake-app" ]; then
+            snow app deploy -x --env app_schema=APPS --env app_suffix=
+          else
+            snow streamlit deploy --replace --prune -x --env app_schema=APPS --env app_suffix=
+          fi
+
+      - name: Summary
+        if: always()
+        run: echo "### ${{ matrix.name }} (\`${{ matrix.type }}\`) -> APPS (production)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup key
+        if: always()
+        run: rm -f /tmp/snowflake_key.p8

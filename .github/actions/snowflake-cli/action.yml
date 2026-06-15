@@ -1,0 +1,32 @@
+name: Snowflake CLI
+description: >
+  Install the Snowflake CLI, write the private key to a temp file, and verify
+  the connection. Reads SNOWFLAKE_* credentials from the calling job's env
+  (set them at the job level so deploy steps and this action share one source).
+
+inputs:
+  cli-version:
+    description: Snowflake CLI version to install.
+    default: "3.20"
+  private-key-raw:
+    description: PEM private key contents (for JWT auth). Written to /tmp/snowflake_key.p8.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: snowflakedb/snowflake-cli-action@v2
+      with:
+        cli-version: ${{ inputs.cli-version }}
+
+    - name: Write private key + show version
+      shell: bash
+      run: |
+        umask 077
+        printf '%s' "${{ inputs.private-key-raw }}" > /tmp/snowflake_key.p8
+        chmod 600 /tmp/snowflake_key.p8
+        snow --version
+
+    - name: Verify connection (temporary connection from job env)
+      shell: bash
+      run: snow connection test -x
