@@ -1,0 +1,54 @@
+name: Cleanup ephemeral branch apps
+
+# When a PR to main is closed (merged or abandoned), remove that branch's
+# throwaway dashboards from APPS_DEV so dev apps don't pile up.
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch name whose ephemeral apps to remove"
+        required: true
+
+concurrency:
+  group: cleanup-${{ github.head_ref || github.event.inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_AUTHENTICATOR: SNOWFLAKE_JWT
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_PRIVATE_KEY_RAW: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
+      PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "3.20"
+
+      # Must match the slug rule in deploy-dev.yml exactly.
+      - name: Compute branch suffix
+        id: slug
+        run: |
+          RAW="${{ github.head_ref || github.event.inputs.branch }}"
+          SLUG=$(echo "$RAW" | tr '[:lower:]' '[:upper:]' | tr -c 'A-Z0-9' '_' | sed 's/_\+/_/g; s/^_//; s/_$//' | cut -c1-24)
+          echo "suffix=_${SLUG}" >> "$GITHUB_OUTPUT"
+          echo "Branch '$RAW' -> app suffix '_${SLUG}'"
+
+      - name: Remove Next.js app (App Runtime / SPCS)
+        working-directory: apps/nextjs-dashboard
+        run: snow app teardown --force -x --env app_schema=APPS_DEV --env app_suffix=${{ steps.slug.outputs.suffix }} || echo "Next.js app already gone."
+
+      - name: Remove Streamlit app
+        run: |
+          snow sql -x -q "DROP STREAMLIT IF EXISTS SKI_RESORT_DEMO.APPS_DEV.SKI_RESORT_STREAMLIT${{ steps.slug.outputs.suffix }}"

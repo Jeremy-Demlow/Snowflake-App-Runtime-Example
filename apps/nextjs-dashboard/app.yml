@@ -1,0 +1,11 @@
+install:
+  commands:
+    - ["npm", "ci", "--include=dev"]
+
+run:
+  command: ["node", ".next/standalone/server.js"]
+
+profile:
+  label: "Ski Resort — Daily KPIs"
+  description: "Read-only dashboard of daily ski-resort visitation and guest activity."
+  icon: icon.svg

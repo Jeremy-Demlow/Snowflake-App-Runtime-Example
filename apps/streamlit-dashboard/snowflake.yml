@@ -1,0 +1,32 @@
+definition_version: 2
+
+# Environments live at the APP layer, not the data layer. The data database is
+# fixed (one read-only copy). What changes per environment is only the app
+# object's SCHEMA and a NAME SUFFIX:
+#   * local / default        -> APPS_DEV, suffix _DEV
+#   * ephemeral feature branch -> APPS_DEV, suffix _<BRANCH> (set by CI)
+#   * production             -> APPS,     suffix "" (set by CI)
+# CI overrides via snow's native --env templating:
+#   snow streamlit deploy --env app_schema=APPS --env app_suffix=
+env:
+  app_schema: APPS_DEV
+  app_suffix: _DEV
+
+entities:
+  ski_resort_streamlit:
+    type: streamlit
+    identifier:
+      name: SKI_RESORT_STREAMLIT<% ctx.env.app_suffix %>
+      database: SKI_RESORT_DEMO
+      schema: <% ctx.env.app_schema %>
+    query_warehouse: SKI_DEMO_WH
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    main_file: streamlit_app.py
+    # The container runtime resolves dependencies from pyproject.toml at load,
+    # which needs PyPI egress via this external access integration.
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml

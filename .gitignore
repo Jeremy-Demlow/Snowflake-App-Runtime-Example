@@ -1,0 +1,35 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+output/
+*.tsbuildinfo
+.env
+.env.local
+
+# Snowflake CLI build artifacts
+**/output/
+.snowflake/
+
+# DCM plan output
+governance/out/
+
+# Secrets / keys -- NEVER commit
+*.p8
+*.pem
+*.key
+rsa_key*
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Python (Streamlit local env)
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Local dev connection (real file ignored; the .example is committed)
+**/.localdev/connections.toml

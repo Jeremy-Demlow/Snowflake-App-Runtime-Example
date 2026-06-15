@@ -1,0 +1,52 @@
+name: Deploy Apps to PROD
+
+# PROD only deploys from main, and only after a required reviewer approves the
+# "production" GitHub Environment. THIS is the lockdown.
+#
+# One-time setup (admin): Settings -> Environments -> New environment "production"
+# -> add a Required reviewer. Add the secrets below under that environment (or
+# repo-wide).
+#
+# SCOPE: app deployment only. DCM governance is one-time setup:
+#   snow dcm deploy SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE --target MAIN
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy-apps:
+    runs-on: ubuntu-latest
+    # The approval gate: this job pauses until a reviewer approves.
+    environment: production
+    env:
+      SNOWFLAKE_AUTHENTICATOR: SNOWFLAKE_JWT
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_PRIVATE_KEY_RAW: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
+      PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: snowflakedb/snowflake-cli-action@v2
+        with:
+          cli-version: "3.20"
+
+      # PROD differs from the committed dev defaults only by WHERE the app object
+      # lands: the APPS schema and no name suffix. Passed via snow's native --env
+      # templating (no file edits / no sed). The data DB is fixed for all envs.
+      - name: Deploy Next.js dashboard (App Runtime / SPCS)
+        working-directory: apps/nextjs-dashboard
+        run: snow app deploy -x --env app_schema=APPS --env app_suffix=
+
+      - name: Deploy Streamlit dashboard
+        working-directory: apps/streamlit-dashboard
+        run: snow streamlit deploy --replace --prune -x --env app_schema=APPS --env app_suffix=

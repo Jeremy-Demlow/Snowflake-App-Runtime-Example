@@ -1,0 +1,25 @@
+# Local dev Snowflake connection (example).
+#
+# Copy this file to `connections.toml` in this same folder, fill in your values,
+# then run the app locally with this folder as SNOWFLAKE_HOME:
+#
+#   Next.js:    SNOWFLAKE_HOME="$PWD/.localdev" SNOWFLAKE_DEFAULT_CONNECTION_NAME=localdev npm run dev
+#   Streamlit:  SNOWFLAKE_HOME="$PWD/.localdev" SNOWFLAKE_DEFAULT_CONNECTION_NAME=localdev \
+#                 uv run --python 3.12 --with streamlit --with "snowflake-connector-python[pandas]" \
+#                 --with altair streamlit run streamlit_app.py
+#
+# WHY a local SNOWFLAKE_HOME? The Snowflake SDK does NOT expand "~" in
+# private_key_file. Use an ABSOLUTE path below. (If your ~/.snowflake/connections.toml
+# already uses an absolute key path, you can skip this file and just set
+# SNOWFLAKE_DEFAULT_CONNECTION_NAME to your connection name.)
+default_connection_name = "localdev"
+
+[localdev]
+account = "<your_account>"                 # run `snow connection list` to find it
+user = "<your_user>"
+role = "SKI_DEVELOPER"                     # reads data + can deploy; or ACCOUNTADMIN
+warehouse = "SKI_DEMO_WH"
+database = "SKI_RESORT_DEMO"               # the single shared read-only data DB
+schema = "MARTS"
+authenticator = "SNOWFLAKE_JWT"
+private_key_file = "/absolute/path/to/your/rsa_key.p8"   # ABSOLUTE path — do NOT use ~

@@ -1,0 +1,41 @@
+# ============================================================================
+# DCM Governance Project — Ski Resort Demo
+#
+# Manages everything AROUND the data (roles, warehouse, APPS / APPS_DEV
+# schemas, read-only grants). It does NOT define the data tables/semantic
+# views — those already exist in the database.
+#
+# ONE database, ONE governance project. Environments are separated at the
+# APP layer, not the data layer:
+#   APPS      -> production app objects (consumers use these)
+#   APPS_DEV  -> dev + ephemeral feature-branch app objects
+# The data is read-only and identical across environments, so there is no
+# per-environment data database.
+#
+#   Project: SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE
+# ============================================================================
+#
+# >>> BEFORE YOU DEPLOY: change the account_identifier and demo_user values
+# >>> below to your own account and Snowflake user(s).
+# ============================================================================
+manifest_version: 2
+type: DCM_PROJECT
+default_target: "MAIN"
+
+targets:
+  MAIN:
+    account_identifier: SFSENORTHAMERICA-DEMO_JDEMLOW   # <- change to your account
+    project_name: "SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE"
+    project_owner: ACCOUNTADMIN
+    templating_config: "MAIN"
+
+templating:
+  defaults:
+    db: "SKI_RESORT_DEMO"
+    wh_size: "XSMALL"
+    demo_user: "JDEMLOW"            # <- change to your Snowflake user(s)
+  configurations:
+    MAIN:
+      db: "SKI_RESORT_DEMO"
+      wh_size: "XSMALL"
+      demo_user: "JDEMLOW"          # <- change to your Snowflake user(s)

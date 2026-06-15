@@ -1,0 +1,13 @@
+[project]
+name = "ski-resort-streamlit"
+version = "0.1.0"
+# Streamlit in Snowflake container runtime requires a dependency manifest.
+# These are resolved at app load via the PyPI external access integration
+# declared in snowflake.yml. They are all standard, pre-installed packages.
+requires-python = ">=3.11"
+dependencies = [
+    "snowflake-snowpark-python",
+    "streamlit",
+    "pandas",
+    "altair",
+]
