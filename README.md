@@ -74,7 +74,6 @@ these apps. In the CoCo chat:
 │   └── _template/          ← copy me to start a new app (not deployed)
 ├── governance/             ← DCM project: roles, warehouse, schemas, grants
 ├── .github/
-│   ├── actions/snowflake-cli/  ← shared CLI setup composite action
 │   ├── workflows/          ← deploy-dev, deploy-prod, cleanup-branch, dcm-deploy
 │   └── CODEOWNERS          ← platform owns .github + governance; teams own apps/*
 ├── scripts/teardown.sh

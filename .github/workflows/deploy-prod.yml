@@ -78,10 +78,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Snowflake CLI
-        uses: ./.github/actions/snowflake-cli
+      - uses: snowflakedb/snowflake-cli-action@v2
         with:
-          private-key-raw: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
+          cli-version: "3.20"
+
+      - name: Verify connection
+        run: snow connection test -x
 
       - name: Deploy ${{ matrix.name }} (${{ matrix.type }}) to APPS
         working-directory: ${{ matrix.dir }}
@@ -96,7 +98,3 @@ jobs:
       - name: Summary
         if: always()
         run: echo "### ${{ matrix.name }} (\`${{ matrix.type }}\`) -> APPS (production)" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Cleanup key
-        if: always()
-        run: rm -f /tmp/snowflake_key.p8

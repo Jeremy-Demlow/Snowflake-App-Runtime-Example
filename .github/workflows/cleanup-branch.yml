@@ -83,10 +83,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Snowflake CLI
-        uses: ./.github/actions/snowflake-cli
+      - uses: snowflakedb/snowflake-cli-action@v2
         with:
-          private-key-raw: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_RAW }}
+          cli-version: "3.20"
+
+      - name: Verify connection
+        run: snow connection test -x
 
       - name: Remove ${{ matrix.name }} (${{ matrix.type }}) from APPS_DEV
         working-directory: ${{ matrix.dir }}
@@ -102,7 +104,3 @@ jobs:
             base="$(grep -A6 'type:[[:space:]]*streamlit' snowflake.yml | grep -m1 'name:' | sed -E 's/.*name:[[:space:]]*//; s/<%.*%>//' | tr -d '[:space:]')"
             snow sql -x -q "DROP STREAMLIT IF EXISTS ${SNOWFLAKE_DATABASE}.APPS_DEV.${base}${SUFFIX}"
           fi
-
-      - name: Cleanup key
-        if: always()
-        run: rm -f /tmp/snowflake_key.p8

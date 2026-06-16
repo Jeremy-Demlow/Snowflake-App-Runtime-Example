@@ -129,7 +129,7 @@ When you're working with a team, you don't deploy from your laptop — you let
 
 ### One-time GitHub setup (an admin does this)
 
-The CI uses a shared composite action over the official
+The CI uses the official
 [`snowflakedb/snowflake-cli-action`](https://github.com/snowflakedb/snowflake-cli-action).
 Credentials use a **secrets vs variables** split: sensitive values are secrets
 (masked), while role/warehouse/database are variables (readable in logs).

@@ -102,9 +102,9 @@ The point is the **shared deploy loop**: one matrix ships every app, either fram
 
 ## 4. CI/CD: GitHub Actions
 
-Four workflows, all using a shared composite action
-([`.github/actions/snowflake-cli`](../.github/actions/snowflake-cli/action.yml))
-that installs the official CLI, writes the key, and runs a connection test.
+Four workflows, all using the official
+[`snowflakedb/snowflake-cli-action`](https://github.com/snowflakedb/snowflake-cli-action)
+to install the CLI, followed by a `snow connection test -x` sanity check.
 Credentials use the **secrets vs variables** split (sensitive values masked,
 role/db/warehouse as readable variables) — see
 [PIPELINE_SETUP.md](PIPELINE_SETUP.md).
