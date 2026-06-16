@@ -1,0 +1,41 @@
+# REFERENCE ONLY — do not deploy this folder.
+#
+# This shows the Snowflake App Runtime entity shape your scaffolded app should
+# use so CI can deploy it. Generate the real project with `/snowflake-apps`
+# (or `/build-app`) into a new apps/<your-app>/ folder, then make its
+# snowflake.yml match this convention (see apps/nextjs-dashboard/snowflake.yml
+# for a working copy).
+#
+# Environments live at the APP layer, not the data layer: the data DB is fixed
+# (SKI_RESORT_DEMO), and only the schema + name suffix change per environment.
+#   * local / default          -> APPS_DEV, suffix _DEV
+#   * ephemeral feature branch  -> APPS_DEV, suffix _<BRANCH> (set by CI)
+#   * production                -> APPS,     suffix "" (set by CI)
+definition_version: "2"
+
+env:
+  app_schema: APPS_DEV
+  app_suffix: _DEV
+
+entities:
+  my_app:
+    type: snowflake-app
+    identifier:
+      name: MY_APP<% ctx.env.app_suffix %>
+      database: SKI_RESORT_DEMO
+      schema: <% ctx.env.app_schema %>
+    artifacts:
+      - src: ./*
+        dest: ./
+        ignore:
+          - node_modules
+          - .localdev
+          - .env*
+          - .next
+          - .git
+    query_warehouse: SKI_DEMO_WH
+    build_compute_pool:
+      name: SYSTEM_COMPUTE_POOL_CPU
+    service_compute_pool:
+      name: SYSTEM_COMPUTE_POOL_CPU
+    code_workspace: SKI_RESORT_DEMO.<% ctx.env.app_schema %>.SNOWFLAKE_APPS<% ctx.env.app_suffix %>

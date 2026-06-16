@@ -14,7 +14,8 @@ KPI" dashboard, proving one deploy loop works for either framework:
 |-----|-----------|------------|
 | `apps/nextjs-dashboard` | Next.js (Snowflake App Runtime) | A full web app running on Snowflake (SPCS) |
 | `apps/streamlit-dashboard` | Streamlit in Snowflake | A Python dashboard |
-| `apps/_template` | (starter) | Copy this to begin a new app — never deployed |
+| `apps/_template-streamlit` | (starter) | Copy to begin a Streamlit app — never deployed |
+| `apps/_template-nextjs` | (starter) | Node.js / App Runtime starter (use `/snowflake-apps`) — never deployed |
 
 ## The big idea: environments at the app layer
 
@@ -69,27 +70,41 @@ these apps. In the CoCo chat:
 │   ├── PIPELINE_SETUP.md   ← wire up GitHub Actions (secrets/vars/environments)
 │   └── TEARDOWN.md
 ├── apps/
-│   ├── nextjs-dashboard/   ← example: Next.js (App Runtime)
-│   ├── streamlit-dashboard/← example: Streamlit in Snowflake
-│   └── _template/          ← copy me to start a new app (not deployed)
+│   ├── nextjs-dashboard/     ← example: Snowflake App Runtime (Node.js)
+│   ├── streamlit-dashboard/  ← example: Streamlit in Snowflake
+│   ├── _template-streamlit/  ← Streamlit starter (not deployed)
+│   └── _template-nextjs/     ← App Runtime starter -> /snowflake-apps (not deployed)
 ├── governance/             ← DCM project: roles, warehouse, schemas, grants
 ├── .github/
 │   ├── workflows/          ← deploy-dev, deploy-prod, cleanup-branch, dcm-deploy
 │   └── CODEOWNERS          ← platform owns .github + governance; teams own apps/*
 ├── scripts/teardown.sh
+├── AGENTS.md               ← guidance for AI tools (use /build-app, /snowflake-apps)
 └── CONTRIBUTING.md         ← add a new app in a few steps
 ```
 
 ## Add a new app
 
+**Preferred — use the Cortex Code skills** (they scaffold a full project and
+wire up local preview):
+
+- `/build-app` — describe your app; it picks the framework and routes to the
+  right create skill.
+- `/snowflake-apps` — go straight to a Node.js / App Runtime app.
+- the Streamlit-in-Snowflake skill — for a Python dashboard.
+
+**Manual / offline fallback** — copy a starter:
+
 ```bash
-cp -r apps/_template apps/my-app
-# edit apps/my-app/snowflake.yml (rename MY_APP) and streamlit_app.py
+cp -r apps/_template-streamlit apps/my-app      # Python (Streamlit)
+# or see apps/_template-nextjs/README.md         # Node.js (App Runtime)
+# edit apps/my-app/snowflake.yml (rename MY_APP) and build your app
 git checkout -b my-app && git add apps/my-app && git commit -m "add my-app" && git push -u origin my-app
 ```
 
-Pushing deploys `MY_APP_MY_APP` to `APPS_DEV`; merging to `main` ships `MY_APP`
-to `APPS`. Full steps in [CONTRIBUTING.md](CONTRIBUTING.md).
+Pushing deploys it to `APPS_DEV`; merging to `main` ships it to `APPS`. Full
+steps in [CONTRIBUTING.md](CONTRIBUTING.md); AI-agent guidance in
+[AGENTS.md](AGENTS.md).
 
 ## Quick start
 

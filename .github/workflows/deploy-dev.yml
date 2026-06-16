@@ -1,7 +1,7 @@
 name: Deploy Apps to DEV (ephemeral, per branch)
 
 # Auto-discovers every app under apps/* (skipping names starting with "_", e.g.
-# apps/_template) and deploys each to the APPS_DEV schema with a per-branch name
+# apps/_*) and deploys each to the APPS_DEV schema with a per-branch name
 # suffix. Adding apps/<your-app>/ requires NO change to this workflow.
 #
 # PROD is deploy-prod.yml (approval-gated). Ephemeral apps are removed when the
@@ -14,13 +14,13 @@ on:
       - main
     paths:
       - 'apps/**'
-      - '!apps/_template/**'
+      - '!apps/_*/**'
   pull_request:
     branches:
       - main
     paths:
       - 'apps/**'
-      - '!apps/_template/**'
+      - '!apps/_*/**'
   workflow_dispatch: {}
 
 concurrency:

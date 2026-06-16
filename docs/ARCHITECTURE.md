@@ -77,7 +77,7 @@ flowchart LR
   subgraph registry [apps/ = registry]
     a1["nextjs-dashboard (snowflake-app)"]
     a2["streamlit-dashboard (streamlit)"]
-    a3["_template (skipped: starts with _)"]
+    a3["_template-streamlit / _template-nextjs (skipped: start with _)"]
     a4["your-new-app"]
   end
   registry --> scan["prepare job: glob apps/*/snowflake.yml, skip _*, read type"]
@@ -95,8 +95,8 @@ hardcode the single data database `SKI_RESORT_DEMO`.
   (Next.js), `snow app deploy` to SPCS.
 - [`apps/streamlit-dashboard`](../apps/streamlit-dashboard) — Streamlit in
   Snowflake, `snow streamlit deploy`.
-- [`apps/_template`](../apps/_template) — copy-me starter; the `_` prefix keeps
-  it out of CI.
+- [`apps/_template-streamlit`](../apps/_template-streamlit) + [`apps/_template-nextjs`](../apps/_template-nextjs)
+  — copy-me starters; the `_` prefix keeps them out of CI.
 
 The point is the **shared deploy loop**: one matrix ships every app, either framework.
 
@@ -141,7 +141,7 @@ Who owns what, and what each change triggers:
 | Concern | Lives in | Trigger | Owner |
 | --- | --- | --- | --- |
 | An app's code/config | `apps/<name>/` | branch -> `APPS_DEV`; merge -> `APPS` (gated) | app team |
-| Adding an app | copy `apps/_template/` | same, no CI edit | app team |
+| Adding an app | `/build-app` or copy `apps/_template-*` | same, no CI edit | app team |
 | Removing an app | delete folder | stops deploys; prod object dropped **manually** | app team |
 | Governance | `governance/**` | PR plan -> merge deploys `MAIN` | platform/admin |
 | Pipeline itself | `.github/**` | PR review (CODEOWNERS) | platform team |

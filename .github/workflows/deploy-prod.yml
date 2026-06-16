@@ -12,7 +12,7 @@ on:
       - main
     paths:
       - 'apps/**'
-      - '!apps/_template/**'
+      - '!apps/_*/**'
   workflow_dispatch: {}
 
 concurrency:
