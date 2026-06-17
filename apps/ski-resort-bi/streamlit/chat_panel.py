@@ -73,6 +73,24 @@ def _tool_result_to_df(raw: str) -> pd.DataFrame | None:
         return None
     if df.empty:
         return None
+    # The explorer's json sql_format encodes every cell as a JSON scalar string:
+    # dates arrive double-quoted ('"2026-12-18"') and numbers as quoted strings
+    # ('8719'). Decode each cell back to its real scalar so numbers are numeric
+    # and dates are clean (fixes both auto-charting and the table display).
+    def _decode(v: Any) -> Any:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                return v
+        return v
+
+    # Apply unconditionally: _decode is a no-op for non-strings, and gating on
+    # ``dtype == object`` misses string-typed columns on pandas builds that infer
+    # a dedicated string dtype.
+    for col in df.columns:
+        df[col] = df[col].map(_decode)
+    df = df.infer_objects()
     if len(df) > _TABLE_ROW_CAP:
         df = df.head(_TABLE_ROW_CAP)
     return df
