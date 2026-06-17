@@ -10,11 +10,17 @@ can short-circuit canned dashboard questions when enabled in settings.
 """
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
 import pandas as pd
 import streamlit as st
+
+# Caps so a chatty result set can't blow up the message or render junk charts.
+_TABLE_ROW_CAP = 1000
+_CHART_ROW_CAP = 100
+_MAX_TABLES_PER_MSG = 3
 
 from bridge import get_or_create_session
 from cortex_code_agent import BIAnswer, CORTEX_AGENTS, EXPLORER_CONNECTION, call_cortex_agent
@@ -42,6 +48,86 @@ def _provider_for(tool_name: str, summary: str) -> str:
     if tool_name in ("sql_execute", "SQL") and "DATA_AGENT_RUN" in (summary or "").upper():
         return "agent"
     return _PROVIDER_BY_TOOL.get(tool_name, "other")
+
+
+def _tool_result_to_df(raw: str) -> pd.DataFrame | None:
+    """Parse an explorer sql_execute result (a JSON string from sql_format=json)
+    into a DataFrame. Returns None on any parse failure or an empty result set.
+
+    Accepts either a bare ``[{...}, ...]`` array of row dicts or a
+    ``{"data": [...]}`` envelope. Defensive by design — a bad frame must never
+    break the chat message."""
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if isinstance(parsed, dict):
+        parsed = parsed.get("data") or parsed.get("rows") or parsed.get("result")
+    if not isinstance(parsed, list) or not parsed:
+        return None
+    try:
+        df = pd.DataFrame(parsed)
+    except (ValueError, TypeError):
+        return None
+    if df.empty:
+        return None
+    if len(df) > _TABLE_ROW_CAP:
+        df = df.head(_TABLE_ROW_CAP)
+    return df
+
+
+def _auto_chart(df: pd.DataFrame, container: Any) -> None:
+    """Render a conservative auto-chart beneath a result table.
+
+    Picks an x-axis and numeric series from a small result (2-100 rows):
+      - Prefer the first datetime-parseable column as x -> line chart (other
+        descriptive dimension columns are ignored, so a typical
+        date + season + flag + metric result still charts).
+      - Else, if there is exactly one non-numeric column, use it as a
+        categorical x -> bar chart.
+      - Else render nothing (the table already shows).
+    Boolean flag columns are excluded from the numeric y-series. Wrapped so a
+    weird frame never breaks the message."""
+    try:
+        if not isinstance(df, pd.DataFrame) or not (2 <= len(df) <= _CHART_ROW_CAP):
+            return
+
+        def _is_numeric(col: str) -> bool:
+            return (
+                pd.api.types.is_numeric_dtype(df[col])
+                and not pd.api.types.is_bool_dtype(df[col])
+            )
+
+        numeric_cols = [c for c in df.columns if _is_numeric(c)]
+        if not numeric_cols:
+            return
+        non_numeric = [c for c in df.columns if c not in numeric_cols]
+
+        x_col: str | None = None
+        is_dt = False
+        for c in non_numeric:
+            if pd.to_datetime(df[c], errors="coerce").notna().all():
+                x_col, is_dt = c, True
+                break
+        if x_col is None:
+            if len(non_numeric) == 1:
+                x_col = non_numeric[0]
+            else:
+                return  # ambiguous x -> table only
+
+        y_cols = [c for c in numeric_cols if c != x_col]
+        if not y_cols:
+            return
+        plot = df[[x_col, *y_cols]].set_index(x_col)
+        if is_dt:
+            container.line_chart(plot, use_container_width=True)
+        else:
+            container.bar_chart(plot, use_container_width=True)
+    except Exception:  # noqa: BLE001 - charts are best-effort
+        return
+
 
 
 def _init_state() -> None:
@@ -92,9 +178,21 @@ def _render_explore_message(msg: dict) -> None:
     elif not agent_evidence:
         st.markdown("_(no answer text)_")
 
-    for df in msg.get("tables", [])[:3]:
+    show_charts = bool((st.session_state.get("coco_settings", {}) or {}).get("show_charts", True))
+
+    # Agent-authored Vega-Lite charts first (richest signal).
+    if show_charts:
+        for spec in msg.get("charts", []) or []:
+            try:
+                st.vega_lite_chart(spec, use_container_width=True)
+            except Exception:  # noqa: BLE001 - a bad spec must not break the turn
+                pass
+
+    for df in msg.get("tables", [])[:_MAX_TABLES_PER_MSG]:
         if isinstance(df, pd.DataFrame) and not df.empty:
             st.dataframe(df, hide_index=True, use_container_width=True)
+            if show_charts:
+                _auto_chart(df, st)
     _render_evidence_expander(msg.get("evidence", []))
     u = msg.get("usage") or {}
     mode_label = "Agent-aware" if msg.get("prompt_mode") == "agent" else "Explore-only"
@@ -151,6 +249,10 @@ def _prefetch_agent(prompt: str, status) -> dict | None:
         "input": prompt,
         "error": "",
         "result_preview": answer[:1500],
+        # Rich payload (popped by _run_explorer_turn before the evidence is
+        # rendered): the agent's own result tables + Vega-Lite chart specs.
+        "dataframes": [df for df in resp.dataframes if isinstance(df, pd.DataFrame) and not df.empty],
+        "chart_specs": list(resp.chart_specs or []),
     }
 
 
@@ -165,6 +267,8 @@ def _run_explorer_turn(prompt: str) -> dict:
 
     text_parts: list[str] = []
     evidence: list[dict] = []
+    tables: list[pd.DataFrame] = []
+    charts: list[dict] = []
     pending: dict[str, dict] = {}
     t0 = time.monotonic()
 
@@ -174,6 +278,10 @@ def _run_explorer_turn(prompt: str) -> dict:
         if prompt_mode == "agent":
             agent_ev = _prefetch_agent(prompt, status)
             if agent_ev:
+                # Pop the rich payload so the rendered evidence stays lean; the
+                # agent's own tables + Vega charts go straight onto the message.
+                charts.extend(agent_ev.pop("chart_specs", []) or [])
+                tables.extend(agent_ev.pop("dataframes", []) or [])
                 evidence.append(agent_ev)
                 explorer_prompt = (
                     f"{prompt}\n\n[RESORT_EXECUTIVE agent answer]\n"
@@ -209,6 +317,11 @@ def _run_explorer_turn(prompt: str) -> dict:
                 rec["error"] = ev.get("tool_result", "")[:400] if is_err else ""
                 rec["result_preview"] = "" if is_err else str(ev.get("tool_result", ""))[:1500]
                 evidence.append(rec)
+                # Parse a successful SQL result into a table for rich display.
+                if not is_err and rec.get("provider") == "sql" and len(tables) < _MAX_TABLES_PER_MSG:
+                    df = _tool_result_to_df(ev.get("tool_result", ""))
+                    if df is not None:
+                        tables.append(df)
                 if is_err:
                     st.warning(f"{rec['tool']} hit an issue; the explorer will adapt.")
             elif kind == "error":
@@ -231,6 +344,8 @@ def _run_explorer_turn(prompt: str) -> dict:
         "prompt_mode": prompt_mode,
         "text": "".join(text_parts).strip(),
         "evidence": evidence,
+        "tables": tables[:_MAX_TABLES_PER_MSG],
+        "charts": charts,
         "usage": usage,
     }
 
@@ -293,9 +408,12 @@ def _run_fast_path(prompt: str, settings: dict) -> BIAnswer:
 
 def _render_fast_answer(answer: BIAnswer) -> None:
     st.markdown(answer.text)
+    show_charts = bool((st.session_state.get("coco_settings", {}) or {}).get("show_charts", True))
     for df in answer.tables[:3]:
         if isinstance(df, pd.DataFrame) and not df.empty:
             st.dataframe(df, hide_index=True, use_container_width=True)
+            if show_charts:
+                _auto_chart(df, st)
     if answer.evidence:
         ok = sum(1 for ev in answer.evidence if not ev.errors)
         with st.expander(f"Evidence checked ({ok}/{len(answer.evidence)} succeeded)", expanded=False):

@@ -27,6 +27,7 @@ DEFAULT_SETTINGS = {
     "model": DEFAULT_MODEL,
     "prompt_mode": DEFAULT_PROMPT_MODE,  # "explore" (no agent) | "agent" (DATA_AGENT_RUN accelerator)
     "show_thinking": True,
+    "show_charts": True,
     "due_diligence": "shallow",  # off | shallow | full
     "max_evidence_steps": 5,
     "fast_path": False,  # False = SDK governed explorer (primary); True = deterministic broker
@@ -139,6 +140,15 @@ def render_settings_panel() -> None:
         key="coco_set_thinking",
         help="When off, the assistant suppresses streamed text emitted before "
              "the first tool result.",
+    )
+
+    s["show_charts"] = st.toggle(
+        "Show charts",
+        value=bool(s.get("show_charts", True)),
+        key="coco_set_charts",
+        help="Render result tables as charts: the agent's own Vega-Lite charts "
+             "(Agent-aware) and an auto-chart of chartable SQL results "
+             "(Explore-only). Tables always show; turn off to hide charts only.",
     )
 
     st.divider()
