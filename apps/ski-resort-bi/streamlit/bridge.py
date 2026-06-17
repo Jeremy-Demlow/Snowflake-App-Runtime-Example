@@ -67,6 +67,10 @@ def _make_stderr_callback(buffer: list[str], limit: int = STDERR_RING_LIMIT):
         buffer.append(line)
         if len(buffer) > limit:
             del buffer[: len(buffer) - limit]
+        # Also stream to the process stderr so SYSTEM$GET_SERVICE_LOGS captures
+        # the explorer's CLI output in-container (the Debug tab is only visible
+        # in the browser, which makes remote diagnosis impossible otherwise).
+        print(f"[explorer] {line}", file=sys.stderr, flush=True)
     return _cb
 
 
@@ -135,6 +139,7 @@ class AgentSession:
         except Exception:
             self.connect_error = traceback.format_exc()
             self._connected = False
+            print(f"[explorer] CONNECT FAILED:\n{self.connect_error}", file=sys.stderr, flush=True)
 
     def stop(self) -> None:
         if self._chat is None or not self._connected:

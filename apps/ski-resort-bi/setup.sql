@@ -100,8 +100,27 @@ $$
 -- SHOW ENDPOINTS IN SERVICE SKI_RESORT_BI_DB.SPCS.SKI_RESORT_BI_SERVICE;  -- ingress_url
 -- SELECT SYSTEM$GET_SERVICE_LOGS('SKI_RESORT_BI_DB.SPCS.SKI_RESORT_BI_SERVICE', 0, 'ski-resort-bi', 200);
 
--- Network policy gotcha: if the account has a network policy, allow SPCS ingress
--- IPs BEFORE creating the service:
---   CREATE OR REPLACE NETWORK RULE SKI_RESORT_BI_DB.SPCS.SPCS_INGRESS
---     TYPE='IPV4' MODE='INGRESS' VALUE_LIST=('153.45.0.0/16');
---   ALTER NETWORK POLICY <POLICY> ADD ALLOWED_NETWORK_RULE_LIST=(SKI_RESORT_BI_DB.SPCS.SPCS_INGRESS);
+-- ============================================================================
+-- 9) NETWORK POLICY GOTCHA (REQUIRED if the account has a network policy)
+-- ----------------------------------------------------------------------------
+-- The container connects OUT to Snowflake (trb65519.snowflakecomputing.com:443)
+-- using the key-pair in connections.toml. Its source IPs are the SPCS service
+-- egress IPs (153.45.0.0/16). If the account has a restrictive network policy
+-- (e.g. a VPN allowlist), those egress IPs are blocked and every query fails:
+--   250001 (08001): ... Incoming request with IP/Token 153.45.x.x is not allowed
+--
+-- Fix WITHOUT touching the (shared) account policy: give the SERVICE USER its
+-- own network policy that allows the SPCS egress range. A user-level policy
+-- overrides the account policy for that user only, so the strict account policy
+-- still applies to everyone else, and the explorer stays pinned to SKI_READONLY.
+--   (We keep key-pair auth on purpose: it pins the explorer to a read-only role.
+--    The SPCS OAuth token would run as the service owner, removing that guardrail.)
+CREATE OR REPLACE NETWORK POLICY SKI_BI_SVC_NP
+  ALLOWED_IP_LIST = ('153.45.0.0/16')
+  COMMENT = 'Allow SPCS service egress IPs for the SKI_BI_SVC service user only.';
+ALTER USER SKI_BI_SVC SET NETWORK_POLICY = SKI_BI_SVC_NP;
+-- New connections pick this up immediately; no service restart needed.
+--
+-- (Separately, if a network policy also blocks INGRESS to the public endpoint,
+-- add the SPCS ingress range to the account policy via an INGRESS network rule.)
+

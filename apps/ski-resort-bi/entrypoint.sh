@@ -44,6 +44,7 @@ warehouse = "SKI_DEMO_WH"
 database = "SKI_RESORT_DEMO"
 schema = "MARTS"
 EOF
+chmod 600 "${HOME}/.snowflake/connections.toml"
 
 export SNOWFLAKE_CONNECTION_NAME="${SNOWFLAKE_CONNECTION_NAME:-myconnection}"
 

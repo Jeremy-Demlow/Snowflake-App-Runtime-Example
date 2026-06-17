@@ -276,7 +276,9 @@ def _render_chat() -> None:
             st.session_state["bi_last_evidence"] = msg["evidence"]
             st.session_state["bi_last_usage"] = msg["usage"]
             st.session_state["bi_messages"].append(msg)
-    st.rerun()
+    # Rerun only the chat fragment (not the whole page) so the dashboard stays
+    # put and the conversation re-renders cleanly from session_state.
+    st.rerun(scope="fragment")
 
 
 # --- optional deterministic fast path ----------------------------------------
@@ -345,7 +347,7 @@ def _render_debug() -> None:
         st.session_state["bi_last_evidence"] = []
         st.session_state["bi_last_usage"] = {}
         st.session_state["agent_history"] = []
-        st.rerun()
+        st.rerun(scope="fragment")
 
 
 def render_chat_panel(connection: str) -> None:

@@ -37,6 +37,19 @@ def _connection_picker() -> str:
     return connection
 
 
+@st.fragment
+def _dashboard_fragment(connection: str) -> None:
+    """Dashboard reruns in isolation: chart interactions don't touch the chat."""
+    render_dashboard(suppress_title=True, connection_name=connection)
+
+
+@st.fragment
+def _chat_fragment(connection: str) -> None:
+    """Chat reruns in isolation: a chat turn / tab switch doesn't re-run the
+    dashboard, and dashboard interactions don't reset the conversation."""
+    render_chat_panel(connection)
+
+
 def main() -> None:
     st.set_page_config(layout="wide", page_title="Ski KPIs · Cortex Code chat")
     connection = _connection_picker()
@@ -47,10 +60,10 @@ def main() -> None:
     with bcol:
         st.caption("AI BI panel below")
 
-    render_dashboard(suppress_title=True, connection_name=connection)
+    _dashboard_fragment(connection)
     st.divider()
     st.subheader("Ask about this dashboard")
-    render_chat_panel(connection)
+    _chat_fragment(connection)
 
 
 if __name__ == "__main__":
