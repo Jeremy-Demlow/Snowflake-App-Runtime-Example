@@ -25,6 +25,13 @@ GRANT SELECT ON FUTURE VIEWS  IN SCHEMA <% DB %>.STAGING TO ROLE SKI_READONLY;
 GRANT SELECT ON ALL SEMANTIC VIEWS    IN SCHEMA <% DB %>.SEMANTIC TO ROLE SKI_READONLY;
 GRANT SELECT ON FUTURE SEMANTIC VIEWS IN SCHEMA <% DB %>.SEMANTIC TO ROLE SKI_READONLY;
 
+-- ---- Cortex Agents (read) --------------------------------------------------
+-- So apps that call the agents (e.g. the ski-resort-bi explorer's Agent-aware
+-- mode) can use them under SKI_READONLY.
+GRANT USAGE ON SCHEMA <% DB %>.AGENTS TO ROLE SKI_READONLY;
+GRANT USAGE ON AGENT <% DB %>.AGENTS.RESORT_EXECUTIVE  TO ROLE SKI_READONLY;
+GRANT USAGE ON AGENT <% DB %>.AGENTS.SKI_OPS_ASSISTANT TO ROLE SKI_READONLY;
+
 -- ---- App deployment privileges for the DEVELOPER role ----------------------
 -- So SKI_DEVELOPER (the CI deploy role) can run `snow app deploy` and
 -- `snow streamlit deploy` for BOTH frameworks without ACCOUNTADMIN.

@@ -1,0 +1,34 @@
+# Service spec for the deployed app (referenced by CREATE SERVICE in setup.sql).
+# Replace the image path with your repository's lowercase FQN.
+#
+# Key differences from the SPCS-CLI guide:
+#  - runs Streamlit on :8080 (not ttyd), via the image ENTRYPOINT
+#  - mounts a key-pair SECRET so the CLI + agent auth headless (no externalbrowser)
+#  - attaches EXTERNAL_ACCESS_INTEGRATIONS (set on CREATE SERVICE) for runtime egress
+spec:
+  containers:
+    - name: ski-resort-bi
+      image: /ski_resort_bi_db/spcs/ski_resort_bi_repo/ski-resort-bi:latest
+      env:
+        SNOWFLAKE_ACCOUNT: "<YOUR_ACCOUNT>"      # e.g. trb65519
+        SNOWFLAKE_USER: "<YOUR_USER>"            # e.g. JDEMLOW
+        SNOWFLAKE_CONNECTION_NAME: "myconnection"
+      secrets:
+        # PEM private key delivered as an env var the entrypoint writes to disk.
+        - snowflakeSecret: SKI_RESORT_BI_DB.SPCS.SKI_BI_PRIVATE_KEY
+          secretKeyRef: secret_string
+          envVarName: SNOWFLAKE_PRIVATE_KEY
+      resources:
+        requests:
+          memory: 2Gi
+          cpu: 1000m
+        limits:
+          memory: 4Gi
+          cpu: 2000m
+      readinessProbe:
+        port: 8080
+        path: /
+  endpoints:
+    - name: app
+      port: 8080
+      public: true

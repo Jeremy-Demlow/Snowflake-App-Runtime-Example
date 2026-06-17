@@ -1,0 +1,10 @@
+# App-level Python dependencies for the ski-resort BI explorer container.
+# cocosdkagent is installed separately from the vendored wheel (see Dockerfile).
+streamlit>=1.40
+cortex-code-agent-sdk
+snowflake-connector-python
+pandas
+# Agent REST + key-pair JWT auth path (cortex-code-agent/_jwt_auth.py, agent_client.py)
+PyJWT
+cryptography
+requests

@@ -1,0 +1,21 @@
+# Kaniko build spec — builds the Dockerfile into the image repository entirely
+# inside Snowflake (no local Docker). Upload Dockerfile + this file + the app
+# build context to the build stage, then EXECUTE JOB SERVICE (see setup.sql).
+#
+# Replace <REPO_URL> with the repository_url from:
+#   SHOW IMAGE REPOSITORIES IN SCHEMA <db>.<schema>;
+spec:
+  containers:
+    - name: kaniko-builder
+      image: /snowflake/images/kaniko:latest
+      args:
+        - "--dockerfile=Dockerfile"
+        - "--context=dir:///workspace"
+        - "--destination=<REPO_URL>/ski-resort-bi:latest"
+        - "--cache=false"
+      volumeMounts:
+        - name: source
+          mountPath: /workspace
+  volumes:
+    - name: source
+      source: "@SKI_RESORT_BI_DB.SPCS.BUILD_STAGE"

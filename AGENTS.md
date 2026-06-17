@@ -14,7 +14,8 @@ needs no workflow edits.
   **app layer**, not the data layer: `APPS` = production, `APPS_DEV` = dev /
   ephemeral feature-branch apps. Do **not** create a per-app database.
 - Two example apps: `apps/nextjs-dashboard/` (Snowflake App Runtime / Node.js)
-  and `apps/streamlit-dashboard/` (Streamlit-in-Snowflake).
+  and `apps/streamlit-dashboard/` (Streamlit-in-Snowflake). A third,
+  `apps/ski-resort-bi/`, is a **custom-image SPCS** app (see the third lane below).
 
 ## Adding a new app — use the skills first
 
@@ -31,6 +32,16 @@ Scaffold the project into a **new `apps/<your-app>/` folder** (a name that does
 **not** start with `_`). Manual / offline fallback: copy
 `apps/_template-streamlit/` (Python) or follow `apps/_template-nextjs/README.md`
 (Node.js).
+
+### Third lane: custom-image SPCS (advanced)
+
+When an app needs things SiS and App Runtime can't give it — a custom Dockerfile,
+system packages, or a binary like the `cortex` CLI (App Runtime is Node-only
+today; SiS only adds pip packages) — build your own image and run it as a raw
+SPCS service. Example: `apps/ski-resort-bi/` (Streamlit + Cortex Code Agent SDK,
+Kaniko in-Snowflake build, key-pair SECRET, `CREATE SERVICE`). These apps have
+**no `snowflake.yml`**, so CI auto-discovery skips them; they deploy via their
+own `setup.sql`. Prefer SiS or App Runtime unless you specifically need this.
 
 ## Conventions an agent MUST follow
 

@@ -15,12 +15,14 @@ on:
     paths:
       - 'apps/**'
       - '!apps/_*/**'
+      - '!apps/ski-resort-bi/**'
   pull_request:
     branches:
       - main
     paths:
       - 'apps/**'
       - '!apps/_*/**'
+      - '!apps/ski-resort-bi/**'
   workflow_dispatch: {}
 
 concurrency:

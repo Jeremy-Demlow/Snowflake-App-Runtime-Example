@@ -13,6 +13,7 @@ on:
     paths:
       - 'apps/**'
       - '!apps/_*/**'
+      - '!apps/ski-resort-bi/**'
   workflow_dispatch: {}
 
 concurrency:
