@@ -63,8 +63,8 @@ echo "{\"reviewers\":[{\"type\":\"User\",\"id\":$OWNER_ID}]}" \
   | gh api "repos/$REPO/environments/production" --method PUT --input -
 
 # 2) Repo secrets
-echo "trb65519" | gh secret set SNOWFLAKE_ACCOUNT -R "$REPO"
-echo "JDEMLOW"  | gh secret set SNOWFLAKE_USER    -R "$REPO"
+echo "<YOUR_ACCOUNT>" | gh secret set SNOWFLAKE_ACCOUNT -R "$REPO"   # e.g. trb65519
+echo "<YOUR_USER>"  | gh secret set SNOWFLAKE_USER    -R "$REPO"   # e.g. JDEMLOW
 gh secret set SNOWFLAKE_PRIVATE_KEY_RAW -R "$REPO" < "$KEY"
 # gh secret set PRIVATE_KEY_PASSPHRASE -R "$REPO"   # only if your key has one
 

@@ -121,7 +121,7 @@ class AgentSession:
                 no_mcp=True,
                 sql_format="json",
                 # Empty setting_sources suppresses the "CORTEX_CODE database does
-                # not exist" auto-apply warning on trb65519.
+                # not exist" auto-apply warning on accounts without that database.
                 setting_sources=[],
                 stderr=_make_stderr_callback(self.stderr),
             )
