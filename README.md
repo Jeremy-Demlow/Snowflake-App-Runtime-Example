@@ -7,15 +7,35 @@ deploys it — no pipeline edits. It's approachable for people who have **never
 used an IDE** (if you've used Claude / Cowork, you can do this) but it scales to
 a team of engineers shipping many apps.
 
-It ships with **two example apps** that render the same read-only "Daily Resort
-KPI" dashboard, proving one deploy loop works for either framework:
+It ships with **two simple example apps** that render the same read-only "Daily
+Resort KPI" dashboard (proving one deploy loop works for either framework), plus
+a **more advanced app** that shows how far you can take it — a BI dashboard with
+an AI chat panel:
 
-| App | Framework | What it is |
-|-----|-----------|------------|
+| App | Framework / lane | What it is |
+|-----|------------------|------------|
 | `apps/nextjs-dashboard` | Next.js (Snowflake App Runtime) | A full web app running on Snowflake (SPCS) |
 | `apps/streamlit-dashboard` | Streamlit in Snowflake | A Python dashboard |
+| `apps/ski-resort-bi` | Raw SPCS custom container | Streamlit BI **+ a Cortex Agent chat** (with tables & charts in the answers) — the "third lane" |
 | `apps/_template-streamlit` | (starter) | Copy to begin a Streamlit app — never deployed |
 | `apps/_template-nextjs` | (starter) | Node.js / App Runtime starter (use `/snowflake-apps`) — never deployed |
+
+### Three deployment lanes
+
+The apps demonstrate the three ways to run an app on Snowflake, in increasing
+order of control:
+
+1. **Streamlit in Snowflake (SiS)** — a Python app Snowflake hosts for you;
+   simplest, but you can only `pip install` (no custom OS/binaries).
+   → `apps/streamlit-dashboard`
+2. **Snowflake App Runtime** — a managed container for Node.js web apps (Python
+   support is planned); you control the app, Snowflake builds & runs the
+   container. → `apps/nextjs-dashboard`
+3. **Raw SPCS custom container** — your own `Dockerfile` and `CREATE SERVICE`;
+   full control (any language/binary). Use this when SiS/App Runtime can't host
+   what you need — e.g. `apps/ski-resort-bi` bundles the `cortex` CLI binary, so
+   it must be a custom image. Deployed via its own `setup.sql`, so it's excluded
+   from the CI auto-discovery loop below.
 
 ## The big idea: environments at the app layer
 
@@ -72,9 +92,10 @@ these apps. In the CoCo chat:
 ├── apps/
 │   ├── nextjs-dashboard/     ← example: Snowflake App Runtime (Node.js)
 │   ├── streamlit-dashboard/  ← example: Streamlit in Snowflake
+│   ├── ski-resort-bi/        ← advanced: custom SPCS container — BI + Cortex Agent chat
 │   ├── _template-streamlit/  ← Streamlit starter (not deployed)
 │   └── _template-nextjs/     ← App Runtime starter -> /snowflake-apps (not deployed)
-├── governance/             ← DCM project: roles, warehouse, schemas, grants
+├── governance/             ← DCM project: roles, warehouse, schemas, grants (see governance/README.md)
 ├── .github/
 │   ├── workflows/          ← deploy-dev, deploy-prod, cleanup-branch, dcm-deploy
 │   └── CODEOWNERS          ← platform owns .github + governance; teams own apps/*
@@ -113,8 +134,10 @@ New here? Open **[docs/ONBOARDING.md](docs/ONBOARDING.md)**.
 Already set up? The loop:
 
 ```bash
-# 1. Governance (roles, warehouse, APPS/APPS_DEV schemas, grants) — one time
-snow dcm deploy SKI_RESORT_DEMO.PUBLIC.SKI_GOVERNANCE --target MAIN
+# 1. Governance (roles, warehouse, APPS/APPS_DEV schemas, grants) — one time.
+#    See governance/README.md for what this creates and why.
+snow dcm deploy --target MAIN -c <your-connection>
+snow sql -f governance/post_deployment_grants.sql -D "DB=SKI_RESORT_DEMO" -c <your-connection>
 
 # 2. Ship the apps (defaults deploy to APPS_DEV with the _DEV suffix)
 cd apps/nextjs-dashboard && snow app deploy

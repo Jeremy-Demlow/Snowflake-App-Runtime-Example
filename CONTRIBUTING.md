@@ -61,6 +61,11 @@ CI (`deploy-dev.yml`) discovers `apps/my-app/` automatically and deploys it to
   per-app database.
 - **Naming:** the deployed object is `<name-in-snowflake.yml><suffix>`. Keep
   names unique across apps so they don't collide in `APPS`.
+- **Need full container control?** If `snow app deploy` / `snow streamlit deploy`
+  can't host what you need (a custom `Dockerfile`, an OS binary, a runtime secret
+  mount), follow the **raw-SPCS custom-container** pattern in
+  [`apps/ski-resort-bi/`](apps/ski-resort-bi/README.md): it has no `snowflake.yml`,
+  is excluded from CI auto-discovery, and is deployed via its own `setup.sql`.
 
 ## Remove an app
 
@@ -87,4 +92,5 @@ Each example app's README has copy-paste local-run steps
 `.github/CODEOWNERS` assigns `.github/**` and `governance/**` to the platform
 team (they require review). `apps/*` is owned by the contributing team — you can
 iterate without a platform bottleneck. See the maintenance model in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and what the governance layer
+manages in [governance/README.md](governance/README.md).

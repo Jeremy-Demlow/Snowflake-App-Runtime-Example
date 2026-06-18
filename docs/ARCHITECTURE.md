@@ -29,7 +29,8 @@ this is what lets environments collapse onto the app layer.
 
 The [`governance/`](../governance) directory is a single DCM project. It
 **declaratively manages** everything *around* the data — it does not redefine
-the data tables or semantic views. It defines:
+the data tables or semantic views. For a full explainer of DCM and the role it
+plays, see [`governance/README.md`](../governance/README.md). It defines:
 
 - **Warehouse** `SKI_DEMO_WH` — one shared XS warehouse for all app instances.
 - **Three account roles** with inheritance (no environment suffix):
@@ -99,6 +100,24 @@ hardcode the single data database `SKI_RESORT_DEMO`.
   — copy-me starters; the `_` prefix keeps them out of CI.
 
 The point is the **shared deploy loop**: one matrix ships every app, either framework.
+
+### The third lane: a custom SPCS app outside the registry
+
+[`apps/ski-resort-bi`](../apps/ski-resort-bi) is a more advanced example: a
+Streamlit BI dashboard **plus an AI chat panel** that answers questions about the
+data with text, tables, and charts (two modes — a governed read-only explorer,
+and an "Agent-aware" mode that consults the deployed Cortex Agents). It bundles
+the `cortex` CLI **binary**, which neither Streamlit-in-Snowflake nor App Runtime
+can host, so it runs as a **raw SPCS custom container** (its own `Dockerfile` +
+`CREATE SERVICE`).
+
+Because it isn't a standard `snow app` / `snow streamlit` project, it has **no
+`snowflake.yml`** and is intentionally **excluded from the CI auto-discovery
+registry** (the `prepare` job skips it; path filters exclude `apps/ski-resort-bi/**`).
+It's deployed via its own [`setup.sql`](../apps/ski-resort-bi/setup.sql) and
+documented in its [README](../apps/ski-resort-bi/README.md). It still relies on
+the same governance layer — it queries the data as `SKI_READONLY` and uses the
+Cortex Agents + semantic views that `post_deployment_grants.sql` grants.
 
 ## 4. CI/CD: GitHub Actions
 

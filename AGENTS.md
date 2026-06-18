@@ -61,7 +61,8 @@ own `setup.sql`. Prefer SiS or App Runtime unless you specifically need this.
   PR close -> ephemeral apps removed. Workflows in `.github/workflows/`.
 - **Manual**: `snow app deploy` (App Runtime) / `snow streamlit deploy`
   (Streamlit). Use `/opt/homebrew/bin/snow` if a broken `snow` shadows it.
-- Governance (roles, schemas, grants) is DCM: `governance/` +
+- Governance (roles, schemas, grants) is DCM: `governance/` (see
+  [governance/README.md](governance/README.md)) +
   `.github/workflows/dcm-deploy.yml`. CI/GitHub setup: `docs/PIPELINE_SETUP.md`.
 
 ## Ownership
