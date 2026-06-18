@@ -40,6 +40,73 @@ The chat has **two answer engines** and a small **REST client**:
 
 ---
 
+## The Agent-aware turn, end to end
+
+This is the most important flow in the app: when **Agent-aware** mode is on, the
+chat consults the deployed Cortex Agent as a trusted baseline and the SDK
+explorer enhances it. (File:line references are to `streamlit/chat_panel.py`
+unless noted.)
+
+```
+User types a question in the Chat tab
+        │  _render_chat()  reads settings["fast_path"]            (chat_panel.py:400)
+        ▼
+   fast_path ON?
+   ├── YES → _run_fast_path() → semantic_broker.run_semantic_turn()   (deterministic; default OFF)
+   └── NO  → _run_explorer_turn(prompt)   ← the orchestrator
+                │  prompt_mode = settings["prompt_mode"]            (chat_panel.py:284)
+                │
+        ┌───────┴────────┐
+        │ explore        │ agent-aware
+        │ (no agent)     │
+        │                ▼
+        │   STEP 1 — PRE-FETCH THE AGENT (trusted baseline)        (chat_panel.py:296)
+        │     _prefetch_agent(prompt, status)
+        │       history = st.session_state["agent_history"]        (:244  ← memory, cap 12 msgs)
+        │       resp = call_cortex_agent(
+        │           prompt, agent_fqn=RESORT_EXECUTIVE,
+        │           connection=EXPLORER_CONNECTION (read-only role),
+        │           history=history, timeout=180)                  (:246-248)
+        │            │  REST + SSE (no ~10s sql_execute cap)
+        │            ▼  agent_client.py:call_cortex_agent()
+        │       _build_payload() injects prior turns → messages[]  (agent_client.py:106/120)
+        │            │  → AgentResponse: text + dataframes + chart_specs (Vega) + usage
+        │            ▼
+        │       append {user, assistant} to agent_history (cap 12) (:259-262)
+        │                │ agent_ev (provider="agent") + its tables/charts
+        │                ▼
+        │   STEP 2 — BUILD AUGMENTED PROMPT
+        │     explorer_prompt = prompt
+        │       + "[RESORT_EXECUTIVE agent answer]\n{answer}\n..."
+        │       + "enhance it with a deeper breakdown"
+        └────────┬───────┘
+                 ▼
+   STEP 3 — SDK EXPLORER (enhancement / sole answerer in explore mode)
+     session.send_events(explorer_prompt)                          (bridge.py:send_events → :180 chat.stream())
+       cocosdkagent.Chat keeps its OWN conversation memory across turns
+       each tool call → PreToolUse hooks  (bridge.py:connect):
+         • block_tools(BLOCKED_TOOLS)        (task/Bash/Write… denied)   (:131)
+         • sql_read_only_guard()                                         (:132)
+         • scope_guard(SCOPE_DATABASES)      (SHOW AGENTS / out-of-db rejected) (:134)
+       sql_execute → Snowflake (read-only role, fast aggregation queries)
+                 ▼
+   STEP 4 — RENDER  _render_explore_message(msg)
+     "Resort Executive Agent:"  → agent baseline text   (agent-aware only)
+     ──── divider ────
+     "Explorer enhancement:"    → explorer text
+     + result TABLES and CHARTS (agent Vega chart_specs/dataframes + explorer auto-charts,
+       gated by the "Show charts" toggle)
+     + Evidence expander + "[Agent-aware · consulted agent]" usage badge
+```
+
+**Two independent memories:** `agent_history` (carried by us, replayed into the
+REST agent because its `:run` is stateless) and the `cocosdkagent.Chat`'s own
+thread (persisted in `st.session_state` via `get_or_create_session`). In
+**explore** mode STEP 1–2 are skipped and the explorer answers directly from the
+marts.
+
+---
+
 ## Defense-in-depth guardrails
 
 The explorer is constrained at four layers, strongest first:
